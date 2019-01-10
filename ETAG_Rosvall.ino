@@ -21,7 +21,7 @@ FLASH MEMORY STRUCTURE:
 The onboard flash memory is divided into pages of 528 bytes each. There are probably several thousand pages.
 Page 0 is reserved for RFID tag codes
 Page 1 is reserved for parameters and counters (first four bytes are the current backup memory address)
-TODO: Page 2 is reserved for RFID id
+Page 2 is reserved for RFID id
 The rest is for backup memory.
 
 EDITOR:
@@ -34,19 +34,17 @@ Set these options:
 CHANGE LOG:
 05-04-18 - Added interrupt driven RFID reader (jaywilhelm)
 01-08-19 - Reformatted, Added set-to-compile-time option for rtc (dmitriigalantsev)
+01-09-19 - Added BOARD_ID (dmitriigalantsev)
  */
 
 // ***********INITIALIZE INCLUDE FILES AND I/O PINS*******************
-// #include "ManchesterDecoder.h" // Interrupt driven RFID decoder
 #include "SparkFun_RV1805.h"
-#// Include "ETAGLowPower.h"
 #include <Wire.h>			// Include the standard wire library - used for I2C communication with the clock
 #include <SD.h>				// Include the standard SD card library
 #include <SPI.h>
 
 // TODO: normalize constant names
 // TODO: add a header file
-// TODO: remove motor options
 // TODO: add logs
 // TODO: reduce documentation (there are way too many comments)
 // TODO: get rid of unneded global variables, use macros for constants where possible
@@ -61,11 +59,6 @@ CHANGE LOG:
 #define csFlash			2	// Chip select for flash memory
 #define LED_RFID		31  // Pin to control the LED indicator.
 #define interruptPin	7
-#define MOTPWM			0	// Motor pulse width
-#define MOTL			1	// Motor left
-#define MOTR			2	// Motor right
-#define mStby			3	// Motor controller standby
-#define mSwitch			4	// Motor switch
 #define INT1			7
 
 RV1805 rtc;
@@ -115,6 +108,9 @@ byte RFIDtagUser = 0;				// Stores the first (most significant) byte of a tag ID
 unsigned long RFIDtagNumber = 0;	// Stores bytes 1 through 4 of a tag ID (user number)
 byte RFIDtagArray[5];				// Stores the five individual bytes of a tag ID.
 
+// Board id
+unsigned int BOARD_ID = 0;
+
 // ********************CONSTANTS (SET UP LOGGING PARAMETERS HERE!!)*******************************
 const byte checkTime = 30;			// How long in milliseconds to check to see if a tag is present (Tag is only partially read during this time -- This is just a quick way of detirmining if a tag is present or not
 const unsigned int pollTime1 = 200;	// How long in milliseconds to try to read a tag if a tag was initially detected (applies to both RF circuits, but that can be changed)
@@ -146,7 +142,6 @@ unsigned int cycleCount = 0;						// Counts read cycles
 unsigned int stopCycleCount = 50;					// How many read cycles to maintain serial comminications
 
 byte SDpresent;										// 1 if SD card is detected on startup.
-byte doorState = 1;									// Status of the motorized door. 0 = open, 1 = closed.
 byte readFlashByte(unsigned long fAddress);
 void writeFlashByte(unsigned long fAddress, byte fByte);
 unsigned long getFlashAddr();
@@ -158,6 +153,8 @@ void printDirectory(File dir, int numTabs);
 // *******************************SETUP**************************************
 void setup() {						// This function sets everything up for logging.
 	// Establish startup settings and I/O pins
+	byte temp_id;
+	char ch;
 
 	Wire.begin();					// Enable I2C communication
 
@@ -177,15 +174,6 @@ void setup() {						// This function sets everything up for logging.
 	digitalWrite(SHD_PINA, HIGH);   // Turn the primary RFID circuit off (LOW turns on the EM4095)
 	pinMode(SHD_PINB, OUTPUT);		// Make the secondary RFID shutdown pin an output.
 	digitalWrite(SHD_PINB, HIGH);   // Turn the secondary RFID circuit off (LOW turns on the EM4095)
-
-	// Motor control pins
-	pinMode(mStby, OUTPUT);			// Pin that can put the motor controller in low-power standby mode
-	digitalWrite(mStby, LOW);		// Motor in standby mode
-	pinMode(MOTR, OUTPUT);			// Right motor control pin
-	digitalWrite(MOTR, LOW);		// Turn motor off
-	pinMode(MOTL, OUTPUT);			// Left motor control pin
-	digitalWrite(MOTL, LOW);		// Turn motor off
-	pinMode(mSwitch, INPUT_PULLUP); // Motor switch enabled as input with internal pullup resistor
 
 	// Establish a a couple of parameters for low power sleep mode
 	SYSCTRL->XOSC32K.bit.RUNSTDBY = 1;					// Set the XOSC32K to run in standby (not sure why this is needed)
@@ -240,6 +228,13 @@ void setup() {						// This function sets everything up for logging.
 	getFlashAddr();									// Display the current flash memory data loggin address
 	// WriteFlashByte(0x00000404, 0xFF);			// Uncomment to set flash memory initialization flag to 0xFF, which will cause the memory address to be reset on startup
 
+	// Pre-deployment tests
+	run_tests();
+
+	// Set up board ID
+	if (readFlashByte(0x000800) == 0x0E)
+		BOARD_ID = 0xE00 | readFlashByte(0x000801);
+
 	// Display options menu to user
 	menu = 1;
 	while (menu == 1) {								// Keep displaying menu until an exit condition happens
@@ -251,6 +246,8 @@ void setup() {						// This function sets everything up for logging.
 		serial.println("What to do? (input capital letters)");		// Ask the user for instruction and display the options
 		serial.println("	C/c = set clock to compile time");
 		serial.println("	M/m = set clock manually");
+		serial.println("	I/i = set reader ID");
+		serial.println("	P/p = display reader ID");
 		serial.println("	B/b = display backup memory");
 		serial.println("	E/e = erase (reset) backup memory");
 		serial.println("	Anything else = start logging");
@@ -262,16 +259,15 @@ void setup() {						// This function sets everything up for logging.
 			continue;
 		}
 
-		incomingByte = serial.read();	// Get the entry from the user
-		switch (incomingByte) {			// Execute whatever option the user selected
+		switch (serial.read()) {
 			case 'c':
 			case 'C':
 				if (!rtc.setToCompilerTime()) {
 					//PRINT_ERROR("Can't set clock to compiler time");
-					Serial.println("Something went wrong setting the time");
+					serial.println("Can't set clock to compiler time");
 				}
 				else {
-					Serial.println("Clock set successfully");
+					serial.println("Clock set successfully");
 					//PRINT_LOG("Clock set successfully");
 				}
 				break;
@@ -279,8 +275,43 @@ void setup() {						// This function sets everything up for logging.
 			case 'M':					// Option to set clock
 				inputTime();			// Calls function to get time values from user
 				if (!rtc.setTime(0, ss, mm, hh, da, mo, yr, 1)) {	// Attempt to set clock with input values
-					Serial.println("Something went wrong setting the time");
+					serial.println("Something went wrong setting the time");
 				}
+				break;
+			case 'i':
+			case 'I':
+				serial.println("Input new ETAG id 2 digits");
+				temp_id = 0;
+				for (int i = 0; i < 2; i++) {
+					ch = serial.read();
+					if (ch == 255) {
+						i--;
+					} else if (!(ch >= '0' && ch <= '9')) {
+						i = 0;
+						temp_id = 0;
+						serial.println("You can only input values 0-9");
+					} else {
+						temp_id <<= 4;			// shift by 4 to convert to hex
+						temp_id |= ch - '0';	// convert char to int
+					}
+				}
+				serial.print("Your new ID is = ");
+				serial.println(temp_id, HEX);
+				write_id_to_flash(temp_id);
+				BOARD_ID = 0xE00 | temp_id;		// update BOARD_ID
+				serial.print("ID in FLASH (MUST MATCH THE INPUT ID) = ");
+				serial.print(readFlashByte(0x000800), HEX);
+				serial.println(readFlashByte(0x000801), HEX);
+				break;
+			case 'p':
+			case 'P':
+				serial.print("ID in FLASH = ");
+				serial.print(readFlashByte(0x000800), HEX);
+				serial.println(readFlashByte(0x000801), HEX);
+				break;
+			case 't':
+			case 'T':
+				run_tests();
 				break;
 			case 'b':
 			case 'B':
@@ -749,7 +780,7 @@ void writeFlashAddr(unsigned long fAddress) {   // Write the address counter for
 	digitalWrite(csFlash, LOW);					// Activate flash chip
 	SPI.transfer(0x58);							// Opcode for read modify write
 	SPI.transfer(0x00);							// First of three address bytes
-	SPI.transfer(0x04);							// 000001oo  second address byte - selects page 1
+	SPI.transfer(0x04);							// 00000100  second address byte - selects page 1
 	SPI.transfer(0x00);							// Third address byte selects byte address 0
 	SPI.transfer(fAddress >> 16);				// Write most significant byte of Flash address
 	SPI.transfer((fAddress >> 8) & 0xFF);		// Second address byte
@@ -900,7 +931,6 @@ void saveLogSD(String event) { // Save log to log file in SD card
 }
 
 void lpSleep() {
-	digitalWrite(MOTR, HIGH) ;						// Must be set high to get low power working - don't know why
 	digitalWrite(SHD_PINB, HIGH);					// Shut down both RFID readers
 	digitalWrite(SHD_PINA, HIGH);
 	attachInterrupt(INT1, ISR, FALLING);
@@ -923,6 +953,44 @@ void ISR() {}		// Dummy routine - not really needed??
  * WORK IN PROGRESS: BEWARE
  *
  */
+
+/* write ID to flash
+ *
+ * @param id - id of the board
+ */
+void write_id_to_flash(unsigned int id)
+{
+	SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));
+	digitalWrite(SDselect, HIGH);				// Make sure the SD card select is off
+	digitalWrite(csFlash, LOW);					// Activate flash chip
+	SPI.transfer(0x58);							// Opcode for read modify write
+	SPI.transfer(0x00);							// First of three address bytes
+	SPI.transfer(0x08);							// 00001000 second address byte - selects page 2
+	SPI.transfer(0x00);							// Third address byte selects byte address 0
+
+	SPI.transfer(0x0E);							// E
+	SPI.transfer(id);							// ID number
+	digitalWrite(csFlash, HIGH);				// Deactivate flash chip
+	delay(20);
+}
+
+/* run a number of tests, recommended to run before deployment */
+void run_tests()
+{
+	unsigned int num_of_errors = 0;
+	if (readFlashByte(0x000800) != 0x0E) {
+		serial.println("[TEST] no board id found in flash!");
+		num_of_errors++;
+	}
+
+	if (num_of_errors > 0) {
+		serial.println("[TEST] PRE-SETUP tests failed!");
+		serial.print("[TEST] Errors found: ");
+		serial.println(num_of_errors);
+	} else {
+		serial.println("[TEST] All tests passed!");
+	}
+}
 
 #if 0
 
