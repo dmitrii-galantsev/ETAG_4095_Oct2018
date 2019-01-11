@@ -14,10 +14,11 @@ Additional documentation will be provided.
 Date: 	01/08/2018
 Power:	Laptop
 Commit: 262f8f9e11d535dba44aab24ae57a1ed34d76e22
+Comment: these values are strictly for testing and might differ in the field
 Stand-by:
 	-> 22-35 mA
 RFID scanned:
-	-> ~55 mA
+	-> ~40-60 mA
 Sleep:
 	-> 8.2 mA
 ```
