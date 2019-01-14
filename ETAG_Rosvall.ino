@@ -36,6 +36,7 @@ CHANGE LOG:
 01-08-19 - Reformatted, Added set-to-compile-time option for rtc (dmitriigalantsev)
 01-09-19 - Added BOARD_ID (dmitriigalantsev)
 01-12-19 - Moved constants into the header file (dmitriigalantsev)
+01-14-19 - Cleaned up more global variables, data logging is now consistent with gen2 (dmitriigalantsev)
  */
 
 // ***********INITIALIZE INCLUDE FILES AND I/O PINS*******************
@@ -46,7 +47,6 @@ CHANGE LOG:
 #include <SPI.h>
 
 // TODO: reduce documentation (there are way too many comments)
-// TODO: get rid of unneded global variables
 
 RV1805 rtc;
 
@@ -56,24 +56,10 @@ uint32_t tagNo2;						// Four least significant hexidecimals in 5 number tag cod
 uint32_t timeSeconds;					// Stores the past Hour, Minute and Second of a read
 uint32_t pastTimeSeconds;				// Stores the past Hour, Minute and Second of a read
 
-// Byte flashArray[528];				// Large array of 528 bytes for writing a full page to onboard flash memory
-// Byte tagCount;						// Keeps track of number of stored tags
-unsigned int pageAddress;				// Page address for flash memory
-unsigned int byteAddress;				// Byte address for flash memory
-union flashMem {						// Union variable for constructing instructions to flash memory
-	unsigned long flashAddress;
-	byte flashAddrByte[4];
-};
-
 String currentDate;						// USed to get the current date in mm/dd/yyyy format (we're weird in the US)
 String currentDateTime;					// Full date and time string
 String currentTime;						// Used to get the time
-String sss, mms, hhs, das, mos, yrs; 	// String variable for storing date/time text elements
-String timeString;						// String for storing the whole date/time line of data
-byte match;								// Used to determine if tags match.
-byte menu;								// Keeps track of whether the menu is active.
 byte ss, mm, hh, da, mo, yr;			// Byte variables for storing date/time elements
-char incomingByte = 0;					// Used for incoming serial data
 unsigned int timeIn[12];				// Used for incoming serial data during clock setting
 
 // Tag reading state variables
@@ -88,13 +74,14 @@ unsigned int parityFail;				// Indicates if there was a parity mismatch (i.e. a 
 unsigned int pulseCount;				// For counting pulses from RFID reader
 
 // Global variable for tag codes
-String RFIDstring;						// Stores the TagID as a 10 character string
-byte RFIDtagArray[5];					// Stores the five individual bytes of a tag ID.
-byte RFIDtagUser = 0;					// Stores the first (most significant) byte of a tag ID (user number)
 unsigned long RFIDtagNumber = 0;		// Stores bytes 1 through 4 of a tag ID (user number)
 
 // Board id
 unsigned int BOARD_ID = 0;
+
+// Additional debugging info
+byte SDpresent;							// 1 if SD card is detected on startup.
+unsigned int add_errors = 0;
 
 /* The reader will output Serial data for a certain number of read cycles;
  * then it will start using a low power sleep mode during the PAUSE_TIME between read attempts.
@@ -108,20 +95,9 @@ unsigned int BOARD_ID = 0;
  * This should succesfully upload the new code to Arduino.
  */
 
-unsigned int cycleCount = 0;			// Counts read cycles
-unsigned int stopCycleCount = 50;		// How many read cycles to maintain serial comminications
-
-byte SDpresent;							// 1 if SD card is detected on startup.
-byte readFlashByte(unsigned long fAddress);
-unsigned long getFlashAddr();
-void dumpMem();
-void printDirectory(File dir, int numTabs);
-void setClk();
-void writeFlashAddr(unsigned long fAddress);
-void writeFlashByte(unsigned long fAddress, byte fByte);
-
-// *******************************SETUP**************************************
-void setup() {						// This function sets everything up for logging.
+/*******************************SETUP**************************************/
+void setup()
+{
 	// Establish startup settings and I/O pins
 	byte temp_id;
 	char ch;
@@ -132,9 +108,9 @@ void setup() {						// This function sets everything up for logging.
 	digitalWrite(LED_RFID, HIGH);   // Turn the LED off (LOW turns it on)
 
 	// SD card and flash memory chip select pins - these pins enable SPI communication with these peripherals
-	pinMode(CS_SD, OUTPUT);		// Chip select pin for SD card must be an output
+	pinMode(CS_SD, OUTPUT);			// Chip select pin for SD card must be an output
 	pinMode(CS_FLASH, OUTPUT);		// Chip select pin for Flash memory
-	digitalWrite(CS_SD, HIGH);   // Make both chip selects high (not selected)
+	digitalWrite(CS_SD, HIGH); 	  	// Make both chip selects high (not selected)
 	digitalWrite(CS_FLASH, HIGH);
 
 	// Pins for controlling the RFID circuits
@@ -154,28 +130,15 @@ void setup() {						// This function sets everything up for logging.
 	// Start real time clock interfcace and get the current time
 	if (rtc.begin() == false) {
 		PRINT_ERROR("Something wrong with clock"); // Try initiation and report if something is wrong
+		add_errors++;
 	}
 	if (rtc.updateTime() == false) {
 		// Updates the time variables from RTC, report if there's a failure
 		PRINT_ERROR("RTC failed");
+		add_errors++;
 	}
 	PRINT_LOG("Clock initialized and set to...."); // Serial message for clock output
 	showTime();											// Function that displays the clock time
-
-	// Set up SD card communication
-	PRINT_LOG("Initializing SD card...");				// Message to user
-	if (!SD.begin(CS_SD)) {
-		PRINT_WARN("SD card failed, or not present"); 	// Initiate the SD card function with the pin that activates the card SD card error message
-		SDpresent = 0;
-	}
-	else {
-		PRINT_LOG("SD card online.");
-		SDpresent = 1;
-		//			serial.println("SD Contents");  // Show entire contents of SD card Root directory (optional)
-		//			File root = SD.open("/");		// Get the contents of the root folder
-		//			printDirectory(root, 0);		// Display all of it.
-	}
-	digitalWrite(CS_SD, HIGH); // SD card turned off for now
 
 	// Set up communication with the flash memory
 	SPI.begin();														// Enable SPI communication for Flash Memory
@@ -187,29 +150,49 @@ void setup() {						// This function sets everything up for logging.
 	serial.println(byte0, HEX);							// Display the byte
 	if (byte0 == 0xFF) {								// If the byte is 0xFF then the flash memory needs to be initialized
 		writeFlashByte(0x00000404, 0xAA);				// Write a different byte to this memory location
-		PRINT_LOG("Initializing Flash Memory: ");  	// Message
+		PRINT_LOG("Initializing Flash Memory: ");		// Message
 		writeFlashAddr(0x00000800);						// Set initial flash memory address for logging data to page 2, byte address 0
 	}
-	PRINT_LOG("Flash Memory IS initialized."); // Confirm initialization
-	getFlashAddr();									// Display the current flash memory data loggin address
-	// WriteFlashByte(0x00000404, 0xFF);			// Uncomment to set flash memory initialization flag to 0xFF, which will cause the memory address to be reset on startup
-
-	// Pre-deployment tests
-	run_tests();
+	PRINT_LOG("Flash Memory IS initialized.");			// Confirm initialization
+	getFlashAddr();										// Display the current flash memory data loggin address
+	// WriteFlashByte(0x00000404, 0xFF);				// Uncomment to set flash memory initialization flag to 0xFF, which will cause the memory address to be reset on startup
 
 	// Set up board ID
 	if (readFlashByte(0x000800) == 0x0E)
 		BOARD_ID = 0xE00 | readFlashByte(0x000801);
+	else
+		PRINT_ERROR("No board ID found in flash!");
 
+	// Set up SD card communication
+	PRINT_LOG("Initializing SD card...");				// Message to user
+	if (!SD.begin(CS_SD)) {
+		PRINT_WARN("SD card failed, or not present"); 	// Initiate the SD card function with the pin that activates the card SD card error message
+		SDpresent = 0;
+		add_errors++;
+	}
+	else {
+		PRINT_LOG("SD card online.");
+		SDpresent = 1;
+		//			serial.println("SD Contents");  // Show entire contents of SD card Root directory (optional)
+		//			File root = SD.open("/");		// Get the contents of the root folder
+		//			printDirectory(root, 0);		// Display all of it.
+	}
+	// Make a file BOARD_IDDATA.txt if it doesn't exist, and add BOARD_ID to the top
+	digitalWrite(CS_SD, HIGH); // SD card turned off for now
+
+/*******************************TESTS**************************************/
+	run_tests(add_errors);
+
+/*******************************MENU***************************************/
 	// Display options menu to user
-	menu = 1;
+	byte menu = 1;
 	while (menu == 1) {								// Keep displaying menu until an exit condition happens
 		serial.println();
 		if (!rtc.updateTime()) {
 			serial.print("RTC failed"); 			// Updates the time variables from RTC
 		}
 		showTime();									// Show the current time
-		serial.println("What to do? (input capital letters)");		// Ask the user for instruction and display the options
+		serial.println("What to do?");				// Ask the user for instruction and display the options
 		serial.println("	C/c = set clock to compile time");
 		serial.println("	M/m = set clock manually");
 		serial.println("	I/i = set reader ID");
@@ -227,15 +210,15 @@ void setup() {						// This function sets everything up for logging.
 
 		switch (serial.read()) {
 			case 'c':
-			case 'C':
+			case 'C':					// Try to set the clock to compiler time
 				if (!rtc.setToCompilerTime()) {
-					PRINT_ERROR("Can't set clock to compiler time");
+					PRINT_ERROR("Can't set clock to compiler time.\nTry option (M).");
 				}
 				else {
 					PRINT_LOG("Clock set successfully");
 				}
 				break;
-			case 'm':					// Option to set clock
+			case 'm':
 			case 'M':					// Option to set clock
 				inputTime();			// Calls function to get time values from user
 				if (!rtc.setTime(0, ss, mm, hh, da, mo, yr, 1)) {	// Attempt to set clock with input values
@@ -275,7 +258,7 @@ void setup() {						// This function sets everything up for logging.
 				break;
 			case 't':
 			case 'T':
-				run_tests();
+				run_tests(add_errors);
 				break;
 			case 'b':
 			case 'B':
@@ -296,48 +279,59 @@ void setup() {						// This function sets everything up for logging.
 	// Prepare for data logging
 	serial.println("Scanning for tags...\n");	// Message to user
 
-}												// End void setup
+
+	// Make a file BOARD_IDDATA.txt if it doesn't exist, and add BOARD_ID to the top
+	digitalWrite(CS_SD, LOW);
+	if (!SD.exists(String(String(BOARD_ID, HEX) + "DATA.txt"))) {
+		File dataFile = SD.open(String(String(BOARD_ID, HEX) + "DATA.txt"), FILE_WRITE);
+		dataFile.println(String(String(BOARD_ID, HEX) + "DATA"));	// write board id to the file
+		dataFile.close();
+	}
+	digitalWrite(CS_SD, HIGH);
+}
 
 // ******************************MAIN PROGRAM*******************************
 
-void loop() {  // This is the main function. It loops (repeats) forever.
+/* this is the main function, loops forever */
+void loop()
+{
 	if (rtc.updateTime() == false) serial.print("RTC failed at beginning of loop "); // Updates the time variables from RTC
 
 	showTime();
 	unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();	// Combine hours and minutes into one variable
-	if (curTime == SLEEP_TIME) {							// Designated go to sleep time
-		digitalWrite(SHD_PINA, HIGH);						// Shut down RFID reader
+	byte RFIDtagArray[5];											// Stores the five individual bytes of a tag ID.
+	String RFIDstring = "";
+	while (curTime == SLEEP_TIME) {						// Designated go to sleep time
+		digitalWrite(SHD_PINA, HIGH);					// Shut down RFID reader
 		// Serial.println("seting alarm");
-		rtc.setAlarm(0, WAKE_M, WAKE_H, 1, 1);				// Second, minute, hour, date, month
+		rtc.setAlarm(0, WAKE_M, WAKE_H, 1, 1);			// Second, minute, hour, date, month
 		rtc.enableInterrupt(INTERRUPT_AIE);
 		rtc.setAlarmMode(4);
 		saveLogSD("SLEEP STARTED");						// Note for the log
-		pinMode(CS_SD, INPUT);						// Make the SD card pin an input so it can serve as interrupt pin
+		pinMode(CS_SD, INPUT);							// Make the SD card pin an input so it can serve as interrupt pin
 		lpSleep();										// Call sleep funciton
 		// ............//								// Sleep happens here
 		blipLED(30);									// Blink indicator - processor reawakened
 		rtc.stopTimer();
 		if(SDpresent == 1){
-			pinMode(CS_SD, OUTPUT);					// Chip select pin for SD card must be an output for writing to SD card
+			pinMode(CS_SD, OUTPUT);						// Chip select pin for SD card must be an output for writing to SD card
 			SD.begin(CS_SD);
 			saveLogSD("SLEEP ENDED");
 		}
 	}
-	// If(cycleCount < stopCycleCount){
 	serial.println("Scanning RFID circuit "); 	// Message part 1: Tell the user which circuit is active
-	// }
 
 	// Attempt tag read
 	if (FastRead(DEMOD_OUT_PIN, CHECK_TIME, POLL_TIME1) == 1) {
 
 		// The following is executed if a tag is detected
-		processTag();   // Parse tag data into string and hexidecimal formats
+		RFIDstring = processTag(RFIDtagArray);   // Parse tag data into string and hexidecimal formats
 		// Updates the time variables from Real Time Clock
 		if (rtc.updateTime() == false) serial.print("RTC failed after tag read ");
 		timeSeconds = (rtc.getDate() * 86400) + (rtc.getHours() * 3600) + (rtc.getMinutes() * 60) + rtc.getSeconds();
 		tagNo = RFIDtagNumber;						// Stores the 4 least significant tag ID numbers - good for all tag comparisons I think.
 		serial.print(RFIDstring);					// Call a subroutine to display the tag data via serial USB
-		serial.print(" detected on antenna ");  	// Message part 1: add a note about which atenna was used
+		serial.print(" detected ");  	// Message part 1: add a note about which atenna was used
 		showTime();									// Message part 2: display the time
 		flashLED();									// Flash the LED briefly to indicate a tag read
 		if((timeSeconds < pastTimeSeconds + DELAY_TIME) & tagNo == tagNo2){ // If everything matches up, the read is a repeat - don't log it.
@@ -345,10 +339,10 @@ void loop() {  // This is the main function. It loops (repeats) forever.
 		} else {
 			if(SDpresent == 1){
 				serial.println("Logging tag data");
-				logRFID_To_SD(currentDateTime);		// Call function to log data to the SD card
+				logRFID_To_SD(currentDateTime, RFIDstring);		// Call function to log data to the SD card
 			}
 			serial.println();
-			writeRFID_To_FlashLine();				// Call function to log to backup memory
+			writeRFID_To_FlashLine(RFIDtagArray);				// Call function to log to backup memory
 			pastTimeSeconds = (rtc.getDate() * 86400) + (rtc.getHours() * 3600) + (rtc.getMinutes() * 60) + rtc.getSeconds();
 			tagNo2 = tagNo;							// Set tagNo2 to current tag number for future comparisons // For keeping track of delaytime.
 		}
@@ -363,7 +357,14 @@ void loop() {  // This is the main function. It loops (repeats) forever.
 // *********************SUBROUTINES************************** //
 // The Following are all subroutines called by the code above //
 
-byte FastRead(int demodOutPin, byte checkDelay, unsigned int readTime) {
+/* attempt to read the RFID tag
+ *
+ * @param demodOutPin - RFID data pin
+ * @param checkDelay  - delay after attaching the interrupt
+ * @param readTime    - how long to try and read the tag
+ */
+byte FastRead(int demodOutPin, byte checkDelay, unsigned int readTime)
+{
 	digitalWrite(SHD_PINA, LOW);			// Turn on primary RFID circuit
 	// Serial.println("fast read activated...");
 	pinMode(demodOutPin, INPUT);				// Set up the input pin as an input
@@ -380,7 +381,6 @@ byte FastRead(int demodOutPin, byte checkDelay, unsigned int readTime) {
 	unsigned long stopMillis = currentMillis + readTime;
 	attachInterrupt(digitalPinToInterrupt(demodOutPin), INT_demodOut, CHANGE);
 
-	// Delay(CHECK_TIME);
 	delay(checkDelay);
 	// Serial.print("pulses detected... ");
 	// Serial.println(pulseCount, DEC);
@@ -407,13 +407,16 @@ byte FastRead(int demodOutPin, byte checkDelay, unsigned int readTime) {
 
 }
 
-void processTag(void)
+/* convert from byte array to string
+ *
+ * @param RFIDtagArray - array of RFID bytes to be decoded
+ */
+String processTag(byte RFIDtagArray[5])
 {
 	// Process each byte (could do a loop but.....)
 	RFIDtagArray[0] = ((RFIDbytes[0] << 3) & 0xF0) + ((RFIDbytes[1] >> 1) & 0x0F);
 	String StringOne = String(RFIDtagArray[0], HEX);
 	if(RFIDtagArray[0] < 0x10) {StringOne = String("0" + StringOne);}
-	RFIDtagUser = RFIDtagArray[0];
 
 	RFIDtagArray[1] = ((RFIDbytes[2] << 3) & 0xF0) + ((RFIDbytes[3] >> 1) & 0x0F);
 	String StringTwo = String(RFIDtagArray[1], HEX);
@@ -423,22 +426,24 @@ void processTag(void)
 	RFIDtagArray[2] = ((RFIDbytes[4] << 3) & 0xF0) + ((RFIDbytes[5] >> 1) & 0x0F);
 	String StringThree = String(RFIDtagArray[2], HEX);
 	if(RFIDtagArray[2] < 0x10) {StringThree = String("0" + StringThree);}
-	RFIDtagNumber = RFIDtagNumber + (RFIDtagArray[2] << 16);
+	RFIDtagNumber += (RFIDtagArray[2] << 16);
 
 	RFIDtagArray[3] = ((RFIDbytes[6] << 3) & 0xF0) + ((RFIDbytes[7] >> 1) & 0x0F);
 	String StringFour = String(RFIDtagArray[3], HEX);
 	if(RFIDtagArray[3] < 0x10) {StringFour = String("0" + StringFour);}
-	RFIDtagNumber = RFIDtagNumber + (RFIDtagArray[3] << 8);
+	RFIDtagNumber += (RFIDtagArray[3] << 8);
 
 	RFIDtagArray[4] = ((RFIDbytes[8] << 3) & 0xF0) + ((RFIDbytes[9] >> 1) & 0x0F);
 	String StringFive = String(RFIDtagArray[4], HEX);
 	if(RFIDtagArray[4] < 0x10) {StringFive = String("0" + StringFive);}
-	RFIDtagNumber = RFIDtagNumber + RFIDtagArray[4];
-	RFIDstring = String(StringOne + StringTwo + StringThree + StringFour + StringFive);
+	RFIDtagNumber += RFIDtagArray[4];
+	String RFIDstring = String(StringOne + StringTwo + StringThree + StringFour + StringFive);
 	RFIDstring.toUpperCase();
+	return RFIDstring;
 }
 
 
+/* interrupt for decoding the RFID data */
 void INT_demodOut(void)
 {
 	volatile uint32_t timeNow = micros();		// Store the current microsecond timer value in timeNow
@@ -518,15 +523,21 @@ void INT_demodOut(void)
 	}
 }
 
-void showTime() {
-	currentDate = rtc.stringDateUSA(); // Get the current date in mm/dd/yyyy format (we're weird in the US)
-	// String currentDate = rtc.stringDate()); // Get the current date in dd/mm/yyyy format (Rest-of-the-world format)
-	currentTime = rtc.stringTime();							// Get the time
+/* update date and time strings */
+void showTime()
+{
+	currentDate = String(rtc.stringDateUSA()).substring(0, 6); 				// Get the current date in mm/dd format
+	currentDate = currentDate + String(rtc.stringDateUSA()).substring(8); 	// Get yy
+	// currentDate = String(rtc.stringDate()).substring(0, 6); 				// Get the current date in dd/mm format
+	// currentDate = currentDate + String(rtc.stringDate()).substring(8); 	// Get yy
+	currentTime = rtc.stringTime();											// Get the time
 	currentDateTime = currentDate + " " + currentTime ;
 	serial.println(currentDateTime);
 }
 
-void flashLED() {
+/* flash the LED */
+void flashLED()
+{
 	for (unsigned int n = 0; n < 100 ; n = n + 30) {	// Loop to Flash LED and delay reading after getting a tag
 		digitalWrite(LED_RFID, LOW);					// The approximate duration of this loop is determined by the readFreq value
 		delay(5);										// It determines how long to wait after a successful read before polling for tags again
@@ -535,19 +546,27 @@ void flashLED() {
 	}
 }
 
-void blinkLED(byte repeats) {
+/* turn on the LED repeats amount of times
+ *
+ * @param repeats - blink the LED n-amount of times
+ */
+void blinkLED(byte repeats)
+{
 	for (int i = 0; i < repeats; i++)	// Flash LED 5 times while waiting for serial connection to come online
 	{
 		delay(500);						// Pause for 0.5 seconds
 		digitalWrite(LED_RFID, LOW);	// Turn the LED on (LOW turns it on)
 		delay(500);						// Pause again
 		digitalWrite(LED_RFID, HIGH);   // Turn the LED off (HIGH turns it off)
-		// Ss = ss + 1;					// Add to counting variable
-	}// End while
-	digitalWrite(LED_RFID, HIGH);		// Make sure LED is off
+	}
 }
 
-void blipLED(byte blip) {
+/* turn the LED on for blip ms
+ *
+ * @param blip - amount of ms to keep the LED on for
+ */
+void blipLED(byte blip)
+{
 	digitalWrite(LED_RFID, LOW);	// Turn the LED on (LOW turns it on)
 	delay(blip);					// Leave LED on for a quick flash
 	digitalWrite(LED_RFID, HIGH);   // Turn the LED off (HIGH turns it off)
@@ -557,28 +576,36 @@ void blipLED(byte blip) {
 }
 
 
-// TODO: match format to that of GEN2 boards
-void logRFID_To_SD(String timeString) {
-	File dataFile = SD.open("DATA.txt", FILE_WRITE);		// Initialize the SD card and open the file "datalog.txt" or create it if it is not there.
+/* log the RFID data to SD card
+ *
+ * @param timeString - scan time
+ * @param RFIDstring - rfid data
+ */
+void logRFID_To_SD(String timeString, String RFIDstring)
+{
+	File dataFile = SD.open(String(String(BOARD_ID, HEX) + "DATA.txt"), FILE_WRITE);
 	if (dataFile) {
-		/*for (int n = 0; n < 5; n++) {						// Loop to print out the RFID code to the SD card
+		/*for (int n = 0; n < 5; n++) {				// Loop to print out the RFID code to the SD card
 		  if (tagData[n] < 10) dataFile.print("0");	// Add a leading zero if necessary
 		  dataFile.print(tagData[n], HEX);			// Print to the SD card
 		  }*/
 
 		dataFile.print(RFIDstring);
-		dataFile.print(",");						// Comma for data delineation
+		dataFile.print(" ");						// Character for data delineation
 		dataFile.println(timeString);				// Log the time
 		dataFile.close();							// Close the file
-		serial.println("saved to SD card.");		// Serial output message to user
+		PRINT_LOG("saved to SD card.");				// Serial output message to user
 	} // Check dataFile is present
 	else {
-		PRINT_ERROR("error opening datalog.txt");// Error message if the "datafile.txt" is not present or cannot be created
+		// Error message if the "datafile.txt" is not present or cannot be created
+		PRINT_ERROR("error opening DATA.txt");
 	}// End check for file
 }
 
 
-void erasePage0() {
+/* empty flash page 0 */
+void erasePage0()
+{
 	SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));
 	digitalWrite(CS_SD, HIGH);	// Make sure the SD card select is off
 	digitalWrite(CS_FLASH, LOW);		// Activate flash chip
@@ -589,7 +616,9 @@ void erasePage0() {
 	digitalWrite(CS_FLASH, HIGH);	// Deactivate flash chip - allow erase to happen
 }
 
-void dumpMem() {
+/* dump some of the flash memory */
+void dumpMem()
+{
 	SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));
 	digitalWrite(CS_SD, HIGH);	// Make sure the SD card select is off
 	char tagData[16];
@@ -673,7 +702,9 @@ void dumpMem() {
 	}
 }
 
-unsigned long getFlashAddr() {						// Get the address counter for the flash memory from page 1 address 0
+/* get the address counter for the flash memory from page 1 byte 0 */
+unsigned long getFlashAddr()
+{
 	digitalWrite(CS_SD, HIGH);					// Make sure the SD card select is off
 	digitalWrite(CS_FLASH, LOW);
 	SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));
@@ -696,7 +727,12 @@ unsigned long getFlashAddr() {						// Get the address counter for the flash mem
 	return fAddress;
 }
 
-void writeFlashAddr(unsigned long fAddress) {   // Write the address counter for the flash memory on page 1 byte address 0
+/* write the address counter for the flash memory
+ *
+ * @param fAddress - address that will be written to page 1 byte 0
+ */
+void writeFlashAddr(unsigned long fAddress)
+{
 	SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));
 	digitalWrite(CS_SD, HIGH);				// Make sure the SD card select is off
 	digitalWrite(CS_FLASH, LOW);					// Activate flash chip
@@ -711,7 +747,12 @@ void writeFlashAddr(unsigned long fAddress) {   // Write the address counter for
 	delay(20);
 }
 
-void writeRFID_To_FlashLine() {
+/* write rfid byte array to flash
+ *
+ * @param RFIDtagArray - array of RFID bytes
+ */
+void writeRFID_To_FlashLine(byte RFIDtagArray[5])
+{
 	unsigned long fAddress = getFlashAddr();	// Get the current flash memory address
 	serial.print("transferring to address: ");
 	serial.println(fAddress, BIN);
@@ -745,25 +786,12 @@ void writeRFID_To_FlashLine() {
 	serial.println("saved to flash.");			// Serial output message to user
 }
 
-char getMode() {
-	char fMode = readFlashByte(0x00000403);		// Feeder mode is stored in page 1, byte 3
-	if ((fMode != 'A') && (fMode != 'O') && (fMode != 'T')) {
-		fMode = 'A';
-		writeFlashByte(0x00000403, 'A');
-	}
-	serial.print("Feeder mode: ");
-	serial.println(fMode);
-	return fMode;
-}
-
-char setMode(char sMode) {
-	writeFlashByte(0x00000403, sMode);
-	serial.print("Feeder mode set to: ");
-	serial.println(sMode);
-	return sMode;
-}
-
-byte readFlashByte(unsigned long fAddress) {
+/* read byte from the memory
+ *
+ * @param fAddress - address to read from
+ */
+byte readFlashByte(unsigned long fAddress)
+{
 	digitalWrite(CS_FLASH, LOW);					// Activate flash chip
 	SPI.transfer(0x03);							// Opcode for low freq read
 	SPI.transfer((fAddress >> 16) & 0xFF);		// First of three address bytes
@@ -774,8 +802,14 @@ byte readFlashByte(unsigned long fAddress) {
 	return fByte;
 }
 
-void writeFlashByte(unsigned long fAddress, byte fByte) {
-	digitalWrite(CS_FLASH, LOW);					// Activate flash chip
+/* write byte to flash
+ *
+ * @param fAddress - memory address
+ * @param fByte - byte to be written to fAddress
+ */
+void writeFlashByte(unsigned long fAddress, byte fByte)
+{
+	digitalWrite(CS_FLASH, LOW);				// Activate flash chip
 	SPI.transfer(0x58);							// Opcode for read modify write
 	SPI.transfer((fAddress >> 16) & 0xFF);		// First of three address bytes
 	SPI.transfer((fAddress >> 8) & 0xFF);		// Second address byte
@@ -785,7 +819,9 @@ void writeFlashByte(unsigned long fAddress, byte fByte) {
 	delay(20);
 }
 
-void inputTime() {								// Function to set the clock
+/* manually set the clock */
+void inputTime()
+{
 	serial.println("Enter mmddyyhhmmss");		// Ask for user input
 	while (serial.available() == 0) {}			// Wait for 12 characters to accumulate
 	for (int n = 0; n < 13; n++) {				// Loop to read all the data from the serial buffer once it is ready
@@ -804,33 +840,12 @@ void inputTime() {								// Function to set the clock
 	ss = ((timeIn[10] - 48) * 10 + (timeIn[11] - 48)); // Convert two ascii characters into a single decimal number
 }
 
-
-void printDirectory(File dir, int numTabs) {
-	while (true) {
-
-		File entry =  dir.openNextFile();
-		if (! entry) {
-			// No more files
-			break;
-		}
-		for (uint8_t i = 0; i < numTabs; i++) {
-			serial.print('\t');
-		}
-		serial.print(entry.name());
-		if (entry.isDirectory()) {
-			serial.println("/");
-			printDirectory(entry, numTabs + 1);
-		} else {
-			// Files have sizes, directories do not
-			serial.print("\t\t");
-			serial.println(entry.size(), DEC);
-		}
-		entry.close();
-	}
-}
-
-
-void saveLogSD(String event) { // Save log to log file in SD card
+/* save log to log file in SD card
+ *
+ * @param event - string to be written to SD card
+ */
+void saveLogSD(String event)
+{
 	File dataFile = SD.open("log.txt", FILE_WRITE);	// Initialize the SD card and open the file "datalog.txt" or create it if it is not there.
 	if (dataFile) {
 		dataFile.print(event);
@@ -851,8 +866,9 @@ void saveLogSD(String event) { // Save log to log file in SD card
 	}// End check for file
 }
 
-void lpSleep() {
-	digitalWrite(SHD_PINA, HIGH);
+/* sleep during night */
+void lpSleep()
+{
 	attachInterrupt(INT1, ISR, FALLING);
 	GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID(GCM_EIC) |	// Configure EIC to use GCLK1 which uses XOSC32K
 		GCLK_CLKCTRL_GEN_GCLK1   |					// This has to be done after the first call to attachInterrupt()
@@ -866,12 +882,6 @@ void lpSleep() {
 }
 
 void ISR() {}		// Dummy routine - not really needed??
-
-/*
- *
- * WORK IN PROGRESS: BEWARE
- *
- */
 
 /* write ID to flash
  *
@@ -893,8 +903,11 @@ void write_id_to_flash(unsigned int id)
 	delay(20);
 }
 
-/* run a number of tests, recommended to run before deployment */
-void run_tests()
+/* run a number of tests, recommended to run before deployment
+ *
+ * @param add_errors - additional errors found
+ */
+void run_tests(unsigned int add_errors)
 {
 	unsigned int num_of_errors = 0;
 	if (readFlashByte(0x000800) != 0x0E) {
@@ -902,61 +915,12 @@ void run_tests()
 		num_of_errors++;
 	}
 
-	if (num_of_errors > 0) {
+	if (num_of_errors + add_errors > 0) {
 		PRINT_WARN("[TEST] PRE-SETUP tests failed!");
 		PRINT_WARN("[TEST] Errors found: ");
-		PRINT_WARN(num_of_errors);
+		serial.print("[TEST]   ");
+		serial.println(num_of_errors + add_errors, DEC);
 	} else {
 		PRINT_LOG("[TEST] All tests passed!");
 	}
 }
-
-#if 0
-
-/* write to flash
- *
- * @param page - page in memory data will be written to
- * @param data - data that will be written to flash
- */
-void write_flash_addr(byte page, unsigned long data)
-{
-	digitalWrite(CS_FLASH, LOW);		// Activate flash chip
-	SPI.beginTransaction(SPI_DEFAULT);
-
-	SPI.transfer(READ_MOD_WRITE);
-	SPI.transfer(0x00);
-	SPI.transfer(page<<2);				// Select page
-	SPI.transfer(0x00);					// Select byte address 0
-
-	for (int8_t i = 0x3; i >= 0x0; i--)
-		SPI.transfer((data >> (i * 0x8)) & 0xFF);
-
-	digitalWrite(CS_FLASH, HIGH);		// Deactivate flash chip
-	SPI.endTransaction();
-}
-
-/* read from flash
- * @param page - page in memory data will be written to
- */
-unsigned long read_flash_addr(byte page)
-{
-	unsigned long data = 0;
-
-	digitalWrite(CS_FLASH, LOW);		// Activate flash chip
-	SPI.beginTransaction(SPI_DEFAULT);
-
-	SPI.transfer(READ_ARRAY);
-	SPI.transfer(0x00);
-	SPI.transfer(page<<2);				// Select page
-	SPI.transfer(0x00);					// Select byte address 0
-
-	for (int8_t i = 0x3; i >= 0x0; i--)
-		data |= SPI.transfer(0x0) << (i * 0x8);
-
-	digitalWrite(CS_FLASH, HIGH);		// Deactivate flash chip
-	SPI.endTransaction();
-
-	return data;
-}
-
-#endif

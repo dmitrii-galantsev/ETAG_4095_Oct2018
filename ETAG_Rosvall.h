@@ -34,7 +34,7 @@ CHANGE LOG:
 #define WAKE_H 	7								// When to wake up in the morning - hour
 #define WAKE_M 	0								// When to wake up in the morning - minute
 #define SLEEP_INTERVAL 25						// How many seconds to sleep at a time, must be less than 1 min.
-#define ON_TIME 1000							// How man MILLISECONDS to stay on between sleep intervals
+#define ON_TIME 1000							// How many MILLISECONDS to stay on between sleep intervals
 #define SLEEP_TIME (SLEEP_H * 100 + SLEEP_M)	// Combined hours and minutes for sleep time
 #define WAKE_TIME (WAKE_H * 100 + WAKE_M) 		// Combined hours and minutes for wake time
 
@@ -69,3 +69,11 @@ CHANGE LOG:
 #define PRINT_ERROR(s)
 
 #endif
+
+/* Function headers */
+byte readFlashByte(unsigned long fAddress);
+unsigned long getFlashAddr();
+void dumpMem();
+void setClk();
+void writeFlashAddr(unsigned long fAddress);
+void writeFlashByte(unsigned long fAddress, byte fByte);
