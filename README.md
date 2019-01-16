@@ -1,6 +1,17 @@
 # ETAG is an RFID reader board used for academic research
 
 ```
+___________________________    ________          .---.        .-----------
+\_   _____/\__    ___/  _  \  /  _____/         /     \  __  /    ------
+ |    __)_   |    | /  /_\  \/   \  ___        / /     \(  )/    -----
+ |        \  |    |/    |    \    \_\  \      //////   ' \/ `   ---
+/_______  /  |____|\____|__  /\______  /     //// / // :    : ---
+        \/                 \/        \/     // /   /  /`    '--
+                                           //          //..\\
+                                                  ====UU====UU====
+                                                      '//||\\`
+                                                         ''``
+
 Hardware was not created by me (Dmitrii Galantsev), nor were the original files.
 Original firmware belongs to Eli Bridge and other collaborators.
 

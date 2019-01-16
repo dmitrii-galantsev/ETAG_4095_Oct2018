@@ -127,6 +127,11 @@ void setup()
 	// Slow flashing LED to create a time window for serial connection.
 	blinkLED(5);
 
+	serial.print(LOGO);
+	serial.print("Ver: ");
+	serial.print(VERSION);
+	serial.println(PADDING);
+
 	// Start real time clock interfcace and get the current time
 	if (rtc.begin() == false) {
 		PRINT_ERROR("Something wrong with clock"); // Try initiation and report if something is wrong
@@ -157,28 +162,35 @@ void setup()
 	getFlashAddr();										// Display the current flash memory data loggin address
 	// WriteFlashByte(0x00000404, 0xFF);				// Uncomment to set flash memory initialization flag to 0xFF, which will cause the memory address to be reset on startup
 
+	delay(1000);
+
 	// Set up board ID
 	if (readFlashByte(0x000800) == 0x0E)
 		BOARD_ID = 0xE00 | readFlashByte(0x000801);
-	else
+	else {
 		PRINT_ERROR("No board ID found in flash!");
+		add_errors++;
+	}
 
 	// Set up SD card communication
 	PRINT_LOG("Initializing SD card...");				// Message to user
 	if (!SD.begin(CS_SD)) {
-		PRINT_WARN("SD card failed, or not present"); 	// Initiate the SD card function with the pin that activates the card SD card error message
+		PRINT_WARN("SD card failed or not present"); 	// Initiate the SD card function with the pin that activates the card SD card error message
 		SDpresent = 0;
 		add_errors++;
 	}
 	else {
 		PRINT_LOG("SD card online.");
 		SDpresent = 1;
-		//			serial.println("SD Contents");  // Show entire contents of SD card Root directory (optional)
-		//			File root = SD.open("/");		// Get the contents of the root folder
-		//			printDirectory(root, 0);		// Display all of it.
+		saveLogSD("LOGGING STARTED");
 	}
-	// Make a file BOARD_IDDATA.txt if it doesn't exist, and add BOARD_ID to the top
 	digitalWrite(CS_SD, HIGH); // SD card turned off for now
+
+	// Set time to compiler time if flag is set
+	#if defined(SET_TIME_ON_COMPILE) && SET_TIME_ON_COMPILE
+		PRINT_LOG("Setting RTC to compiler time");
+		set_rtc_to_compiler_time();
+	#endif
 
 /*******************************TESTS**************************************/
 	run_tests(add_errors);
@@ -201,7 +213,7 @@ void setup()
 		serial.println("	E/e = erase (reset) backup memory");
 		serial.println("	Anything else = start logging");
 		unsigned int serDelay = 0;							// If there's no response then eventually move on and just start logging
-		while (!serial.available() && serDelay++ < 10000) 	// Wait about 10 seconds for a user response
+		while (!serial.available() && serDelay++ < 15000) 	// Wait about 15 seconds for a user response
 			delay(1);
 		if (!serial.available()) {							// If there is a response then perform the corresponding operation
 			menu = 0;
@@ -211,12 +223,7 @@ void setup()
 		switch (serial.read()) {
 			case 'c':
 			case 'C':					// Try to set the clock to compiler time
-				if (!rtc.setToCompilerTime()) {
-					PRINT_ERROR("Can't set clock to compiler time.\nTry option (M).");
-				}
-				else {
-					PRINT_LOG("Clock set successfully");
-				}
+				set_rtc_to_compiler_time();
 				break;
 			case 'm':
 			case 'M':					// Option to set clock
@@ -249,6 +256,9 @@ void setup()
 				PRINT_LOG("ID in FLASH (MUST MATCH THE INPUT ID) = ");
 				serial.print(readFlashByte(0x000800), HEX);
 				serial.println(readFlashByte(0x000801), HEX);
+				if (readFlashByte(0x000801) != temp_id) {
+					PRINT_ERROR("IDs DON'T MATCH!");
+				}
 				break;
 			case 'p':
 			case 'P':
@@ -570,9 +580,6 @@ void blipLED(byte blip)
 	digitalWrite(LED_RFID, LOW);	// Turn the LED on (LOW turns it on)
 	delay(blip);					// Leave LED on for a quick flash
 	digitalWrite(LED_RFID, HIGH);   // Turn the LED off (HIGH turns it off)
-	if(blip == 200) {
-		delay(blip);
-	}
 }
 
 
@@ -595,11 +602,11 @@ void logRFID_To_SD(String timeString, String RFIDstring)
 		dataFile.println(timeString);				// Log the time
 		dataFile.close();							// Close the file
 		PRINT_LOG("saved to SD card.");				// Serial output message to user
-	} // Check dataFile is present
+	}
 	else {
 		// Error message if the "datafile.txt" is not present or cannot be created
 		PRINT_ERROR("error opening DATA.txt");
-	}// End check for file
+	}
 }
 
 
@@ -629,18 +636,12 @@ void dumpMem()
 	serial.print("last flash memory address: ");
 	serial.println(fAddressEnd, DEC);
 	serial.println(fAddressEnd, BIN);
-	// FAddressEnd = 0x00001000;
 	unsigned long fAddress = 0x00000800;			// First address for stored data
 	serial.print("first flash memory: ");
 	serial.println(fAddress, DEC);
 	serial.println(fAddress, BIN);
 
 	while (fAddress < fAddressEnd) {
-		//	if (serial.available())
-		//	{
-		//			serial.println("User exit");
-		//			break;
-		//	}
 		serial.print("starting loop");
 		digitalWrite(CS_FLASH, LOW);					// Activate flash chip
 		SPI.transfer(0x03);							// Opcode for low freq read
@@ -705,7 +706,7 @@ void dumpMem()
 /* get the address counter for the flash memory from page 1 byte 0 */
 unsigned long getFlashAddr()
 {
-	digitalWrite(CS_SD, HIGH);					// Make sure the SD card select is off
+	digitalWrite(CS_SD, HIGH);						// Make sure the SD card select is off
 	digitalWrite(CS_FLASH, LOW);
 	SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));
 	unsigned long fAddress = 0x00030303 ;
@@ -734,8 +735,8 @@ unsigned long getFlashAddr()
 void writeFlashAddr(unsigned long fAddress)
 {
 	SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));
-	digitalWrite(CS_SD, HIGH);				// Make sure the SD card select is off
-	digitalWrite(CS_FLASH, LOW);					// Activate flash chip
+	digitalWrite(CS_SD, HIGH);					// Make sure the SD card select is off
+	digitalWrite(CS_FLASH, LOW);				// Activate flash chip
 	SPI.transfer(0x58);							// Opcode for read modify write
 	SPI.transfer(0x00);							// First of three address bytes
 	SPI.transfer(0x04);							// 00000100  second address byte - selects page 1
@@ -756,9 +757,7 @@ void writeRFID_To_FlashLine(byte RFIDtagArray[5])
 	unsigned long fAddress = getFlashAddr();	// Get the current flash memory address
 	serial.print("transferring to address: ");
 	serial.println(fAddress, BIN);
-	// Serial.print(" ");
-	// DisplayTag();
-	digitalWrite(CS_FLASH, LOW);					// Activate flash chip
+	digitalWrite(CS_FLASH, LOW);				// Activate flash chip
 	SPI.transfer(0x58);							// Opcode for read modify write
 	SPI.transfer((fAddress >> 16) & 0xFF);		// Write most significant byte of Flash address
 	SPI.transfer((fAddress >> 8) & 0xFF);		// Second address byte
@@ -780,7 +779,6 @@ void writeRFID_To_FlashLine(byte RFIDtagArray[5])
 	} else {
 		fAddress = (fAddress & 0xFFFFC00) + bAddress; // Just add to the byte address
 	}
-	// DigitalWrite(CS_FLASH, HIGH); // Deactivate flash chip
 	delay(20);
 	writeFlashAddr(fAddress);					// Write the updated address to flash.
 	serial.println("saved to flash.");			// Serial output message to user
@@ -890,8 +888,8 @@ void ISR() {}		// Dummy routine - not really needed??
 void write_id_to_flash(unsigned int id)
 {
 	SPI.beginTransaction(SPISettings(14000000, MSBFIRST, SPI_MODE0));
-	digitalWrite(CS_SD, HIGH);				// Make sure the SD card select is off
-	digitalWrite(CS_FLASH, LOW);					// Activate flash chip
+	digitalWrite(CS_SD, HIGH);					// Make sure the SD card select is off
+	digitalWrite(CS_FLASH, LOW);				// Activate flash chip
 	SPI.transfer(0x58);							// Opcode for read modify write
 	SPI.transfer(0x00);							// First of three address bytes
 	SPI.transfer(0x08);							// 00001000 second address byte - selects page 2
@@ -910,11 +908,6 @@ void write_id_to_flash(unsigned int id)
 void run_tests(unsigned int add_errors)
 {
 	unsigned int num_of_errors = 0;
-	if (readFlashByte(0x000800) != 0x0E) {
-		PRINT_WARN("no board id found in flash!");
-		num_of_errors++;
-	}
-
 	if (num_of_errors + add_errors > 0) {
 		PRINT_WARN("[TEST] PRE-SETUP tests failed!");
 		PRINT_WARN("[TEST] Errors found: ");
@@ -922,5 +915,16 @@ void run_tests(unsigned int add_errors)
 		serial.println(num_of_errors + add_errors, DEC);
 	} else {
 		PRINT_LOG("[TEST] All tests passed!");
+	}
+}
+
+/* set rtc time */
+void set_rtc_to_compiler_time()
+{
+	if (!rtc.setToCompilerTime()) {
+		PRINT_ERROR("Can't set clock to compiler time.\nTry option (M).");
+	}
+	else {
+		PRINT_LOG("Clock set successfully");
 	}
 }
