@@ -2,6 +2,8 @@
 
 Please refer to [Wiki](https://github.com/dmitrii-galantsev/ETAG_Rosvall/wiki) for additional information.
 
+Stable branch: [v1.2](https://github.com/dmitrii-galantsev/ETAG_Rosvall/tree/v1.2)
+
 ```
 ___________________________    ________          .---.        .-----------
 \_   _____/\__    ___/  _  \  /  _____/         /     \  __  /    ------
