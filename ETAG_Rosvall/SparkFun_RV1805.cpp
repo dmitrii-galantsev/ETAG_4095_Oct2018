@@ -98,7 +98,7 @@ void RV1805::set12Hour()
 {
 	//Do we need to change anything?
 	if(is12Hour() == false)
-	{		
+	{
 		uint8_t hour = BCDtoDEC(readRegister(RV1805_HOURS)); //Get the current hour in the RTC
 
 		//Set the 12/24 hour bit
@@ -118,7 +118,7 @@ void RV1805::set12Hour()
 			hour -= 12;
 			pm = true;
 		}
-		
+
 		hour = DECtoBCD(hour); //Convert to BCD
 
 		if(pm == true) hour |= (1<<HOURS_AM_PM); //Set AM/PM bit if needed
@@ -133,7 +133,7 @@ void RV1805::set24Hour()
 {
 	//Do we need to change anything?
 	if(is12Hour() == true)
-	{		
+	{
 		//Not sure what changing the CTRL1 register will do to hour register so let's get a copy
 		uint8_t hour = readRegister(RV1805_HOURS); //Get the current 12 hour formatted time in BCD
 		boolean pm = false;
@@ -142,7 +142,7 @@ void RV1805::set24Hour()
 			pm = true;
 			hour &= ~(1<<HOURS_AM_PM); //Clear the bit
 		}
-		
+
 		//Change to 24 hour mode
 		uint8_t setting = readRegister(RV1805_CTRL1);
 		setting &= ~(1<<CTRL1_12_24); //Clear the 12/24 hr bit
@@ -150,7 +150,7 @@ void RV1805::set24Hour()
 
 		//Given a BCD hour in the 1-12 range, make it 24
 		hour = BCDtoDEC(hour); //Convert core of register to DEC
-		
+
 		if(pm == true) hour += 12; //2PM becomes 14
 		if(hour == 12) hour = 0; //12AM stays 12, but should really be 0
 		if(hour == 24) hour = 12; //12PM becomes 24, but should really be 12
@@ -180,7 +180,7 @@ bool RV1805::isPM()
 //Strictly resets. Run .begin() afterwards
 void RV1805::reset(void)
 {
-	writeRegister(RV1805_CONF_KEY, RV1805_CONF_RST); //Writes reset value from datasheet	
+	writeRegister(RV1805_CONF_KEY, RV1805_CONF_RST); //Writes reset value from datasheet
 }
 
 //Returns the status byte. This likely clears the interrupts as well.
@@ -216,12 +216,12 @@ char* RV1805::stringTime()
 	{
 		char half = 'A';
 		if(isPM()) half = 'P';
-		
+
 		sprintf(time, "%02d:%02d:%02d%cM", BCDtoDEC(_time[TIME_HOURS]), BCDtoDEC(_time[TIME_MINUTES]), BCDtoDEC(_time[TIME_SECONDS]), half);
 	}
 	else
 		sprintf(time, "%02d:%02d:%02d", BCDtoDEC(_time[TIME_HOURS]), BCDtoDEC(_time[TIME_MINUTES]), BCDtoDEC(_time[TIME_SECONDS]));
-	
+
 	return(time);
 }
 
@@ -235,7 +235,7 @@ bool RV1805::setTime(uint8_t hund, uint8_t sec, uint8_t min, uint8_t hour, uint8
 	_time[TIME_MONTH] = DECtoBCD(month);
 	_time[TIME_YEAR] = DECtoBCD(year);
 	_time[TIME_DAY] = DECtoBCD(day);
-		
+
 	return setTime(_time, TIME_ARRAY_LENGTH);
 }
 
@@ -244,7 +244,7 @@ bool RV1805::setTime(uint8_t * time, uint8_t len)
 {
 	if (len != TIME_ARRAY_LENGTH)
 		return false;
-	
+
 	return writeMultipleRegisters(RV1805_HUNDREDTHS, time, len);
 }
 
@@ -303,9 +303,9 @@ bool RV1805::updateTime()
 {
 	if (readMultipleRegisters(RV1805_HUNDREDTHS, _time, TIME_ARRAY_LENGTH) == false)
 		return(false); //Something went wrong
-	
+
 	if(is12Hour()) _time[TIME_HOURS] &= ~(1<<HOURS_AM_PM); //Remove this bit from value
-	
+
 	return true;
 }
 
@@ -375,14 +375,14 @@ bool RV1805::setToCompilerTime()
 		}
 
 		_time[TIME_HOURS] = DECtoBCD(hour); //Load the modified hours
-	
+
 		if(pm == true) _time[TIME_HOURS] |= (1<<HOURS_AM_PM); //Set AM/PM bit if needed
 	}
-	
+
 	_time[TIME_MONTH] = DECtoBCD(BUILD_MONTH);
 	_time[TIME_DATE] = DECtoBCD(BUILD_DATE);
 	_time[TIME_YEAR] = DECtoBCD(BUILD_YEAR - 2000); //! Not Y2K (or Y2.1K)-proof :(
-	
+
 	// Calculate weekday (from here: http://stackoverflow.com/a/21235587)
 	// 0 = Sunday, 6 = Saturday
 	uint16_t d = BUILD_DATE;
@@ -390,14 +390,14 @@ bool RV1805::setToCompilerTime()
 	uint16_t y = BUILD_YEAR;
 	uint16_t weekday = (d+=m<3?y--:y-2,23*m/9+d+4+y/4-y/100+y/400)%7 + 1;
 	_time[TIME_DAY] = DECtoBCD(weekday);
-	
+
 	return setTime(_time, TIME_ARRAY_LENGTH);
 }
 
 bool RV1805::setAlarm(uint8_t sec, uint8_t min, uint8_t hour, uint8_t date, uint8_t month)
 {
 	uint8_t alarmTime[TIME_ARRAY_LENGTH];
-	
+
 	alarmTime[TIME_HUNDREDTHS] = DECtoBCD(0); //This library assumes we are operating on RC oscillator. Hundredths alarm is not valid in this mode.
 	alarmTime[TIME_SECONDS] = DECtoBCD(sec);
 	alarmTime[TIME_MINUTES] = DECtoBCD(min);
@@ -406,7 +406,7 @@ bool RV1805::setAlarm(uint8_t sec, uint8_t min, uint8_t hour, uint8_t date, uint
 	alarmTime[TIME_MONTH] = DECtoBCD(month);
 	alarmTime[TIME_YEAR] = DECtoBCD(0); //Our alarm cannot read these values, so we set them to 0
 	alarmTime[TIME_DAY] = DECtoBCD(0);
-	
+
 	return setAlarm(alarmTime, TIME_ARRAY_LENGTH);
 }
 
@@ -414,7 +414,7 @@ bool RV1805::setAlarm(uint8_t * alarmTime, uint8_t len)
 {
 	if (len != TIME_ARRAY_LENGTH)
 		return false;
-	
+
 	return writeMultipleRegisters(RV1805_HUNDREDTHS_ALM, alarmTime, TIME_ARRAY_LENGTH);
 }
 
@@ -425,7 +425,7 @@ INTERRUPT_TIE	3
 INTERRUPT_AIE	2
 INTERRUPT_EIE	1
 *********************************/
-void RV1805::enableInterrupt(uint8_t source)  
+void RV1805::enableInterrupt(uint8_t source)
 {
 	uint8_t value = readRegister(RV1805_INT_MASK);
 	value |= (1<<source); //Set the interrupt enable bit
@@ -443,7 +443,7 @@ void RV1805::disableInterrupt(uint8_t source)
 Set Alarm Mode controls which parts of the time have to match for the alarm to trigger.
 When the RTC matches a given time, make an interrupt fire.
 
-Mode must be between 0 and 7 to tell when the alarm should be triggered. 
+Mode must be between 0 and 7 to tell when the alarm should be triggered.
 Alarm is triggered when listed characteristics match:
 0: Disabled
 1: Hundredths, seconds, minutes, hours, date and month match (once per year)
@@ -457,22 +457,22 @@ Alarm is triggered when listed characteristics match:
 	0x08: 0xF0-0xF9 Once per tenth (10 Hz)
 	0x08: 0xFF Once per hundredth (100 Hz)
 ********************************/
-void RV1805::setAlarmMode(uint8_t mode)  
+void RV1805::setAlarmMode(uint8_t mode)
 {
 	if (mode > 0b111) mode = 0b111; //0 to 7 is valid
-	
+
 	uint8_t value = readRegister(RV1805_CTDWN_TMR_CTRL);
 	value &= 0b11100011; //Clear ARPT bits
 	value |= (mode << 2);
 	writeRegister(RV1805_CTDWN_TMR_CTRL, value);
 }
 
-void RV1805::setRptTimer(uint8_t time, uint8_t freq){   //set a timer to repeat a pulse alarm at intervals of time x freq. freq modes 0 = 4096Hz, 1 = 64Hz, 2 = 1Hz, 3 = 1/60 Hz (1 min) 
+void RV1805::setRptTimer(uint8_t time, uint8_t freq){   //set a timer to repeat a pulse alarm at intervals of time x freq. freq modes 0 = 4096Hz, 1 = 64Hz, 2 = 1Hz, 3 = 1/60 Hz (1 min)
   uint8_t setfreq = B00111000 + freq;
   stopTimer();
-  clearInterrupts(); 
-  enableInterrupt(INTERRUPT_TIE);         
-  writeRegister(RV1805_CTDWN_TMR, time - 1);         //reload value - this is the time value that will be reestablished each time the timer ticks down to 0         
+  clearInterrupts();
+  enableInterrupt(INTERRUPT_TIE);
+  writeRegister(RV1805_CTDWN_TMR, time - 1);         //reload value - this is the time value that will be reestablished each time the timer ticks down to 0
   writeRegister(RV1805_TMR_INITIAL, time - 1);            //initial value - intital countdown value (we're just keeping it the same as the reload for the time being)
   uint8_t CLKS = readRegister(RV1805_CTRL2);              //Read current value of control 2 register
   writeRegister(RV1805_CTRL2, (B11011100 & CLKS));        //Clk/INT pin set up as interrupt by clearing bits 1 and 0
@@ -480,7 +480,7 @@ void RV1805::setRptTimer(uint8_t time, uint8_t freq){   //set a timer to repeat 
   value &= 0b00011100;                                    // Clears countdown timer bits while preserving ARPT
   value |= freq;                                          // Sets clock frequency
   value |= (0 << 6);                                      // pulse alarm selected
-  value |= (1 << 5);                                      // repeat selected             
+  value |= (1 << 5);                                      // repeat selected
   value |= (0 << 7);                                      // Timer enable 0 = off 1 = on
   //writeRegister(RV1805_CTDWN_TMR_CTRL, B00111010);        //Bit 7 timer enable off, Bit 6 pulse mode, bit 5 repeat on...
   writeRegister(RV1805_CTDWN_TMR_CTRL, value);
@@ -527,7 +527,7 @@ void RV1805::enableLowPower()
 	writeRegister(RV1805_OUT_CTRL, 0x30); //Disable WDI input, Set bit 4, Disable RST in sleep, Disable CLK/INT in sleep
 
 	writeRegister(RV1805_CONF_KEY, RV1805_CONF_OSC); //Unlock again
-	writeRegister(RV1805_OSC_CTRL, 0b11111100); //OSEL=1, ACAL=11, BOS=1, FOS=1, IOPW=1, OFIE=0, ACIE=0	
+	writeRegister(RV1805_OSC_CTRL, 0b11111100); //OSEL=1, ACAL=11, BOS=1, FOS=1, IOPW=1, OFIE=0, ACIE=0
 	//Use RC Oscillator all the time (to save moar power)
 	//Autocalibrate every 512 seconds to get to 22nA mode
 	//Switch to RC Oscillator when powered by VBackup
@@ -536,7 +536,7 @@ void RV1805::enableLowPower()
 /*******************************************
 Enable Battery Interrupt
 
-The value of edgeTrigger controls whether or not the interrupt is 
+The value of edgeTrigger controls whether or not the interrupt is
 triggered by rising above or falling below the reference voltage.
 Different sets of reference voltages are available based on this value.
 
@@ -668,6 +668,6 @@ bool RV1805::readMultipleRegisters(uint8_t addr, uint8_t * dest, uint8_t len)
 	{
 		dest[i] = _i2cPort->read();
 	}
-	
+
 	return(true);
 }

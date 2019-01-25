@@ -132,17 +132,38 @@ void setup()
 	serial.print(VERSION);
 	serial.println(PADDING);
 
+	// Set up SD card communication
+	PRINT_LOG("Initializing SD card...");
+	if (!SD.begin(CS_SD)) {
+		PRINT_WARN("SD card failed or not present"); 	// Initiate the SD card function with the pin that activates the card SD card error message
+		SDpresent = 0;
+		add_errors++;
+	}
+	else {
+		PRINT_LOG("SD card online.");
+		SDpresent = 1;
+		//saveLogSD("LOGGING STARTED");
+	}
+
 	// Start real time clock interfcace and get the current time
 	if (rtc.begin() == false) {
-		PRINT_ERROR("Something wrong with clock"); // Try initiation and report if something is wrong
+		PRINT_ERROR("RTC FAILED TO START"); // Try initiation and report if something is wrong
+		saveLogSD("[ERROR] RTC FAILED TO START");
 		add_errors++;
 	}
 	if (rtc.updateTime() == false) {
 		// Updates the time variables from RTC, report if there's a failure
-		PRINT_ERROR("RTC failed");
+		PRINT_ERROR("RTC FAILED TO UPDATE");
+		saveLogSD("[ERROR] RTC FAILED TO UPDATE");
 		add_errors++;
 	}
-	PRINT_LOG("Clock initialized and set to...."); // Serial message for clock output
+	if (rtc.getYear() == 0) {
+		// Check if the year has been set
+		PRINT_ERROR("RTC YEAR = 0");
+		saveLogSD("[ERROR] RTC YEAR = 0");
+		add_errors++;
+	}
+	PRINT_LOG("Clock is set to: "); 		// Serial message for clock output
 	showTime();											// Function that displays the clock time
 
 	// Set up communication with the flash memory
@@ -169,21 +190,10 @@ void setup()
 		BOARD_ID = 0xE00 | readFlashByte(0x000801);
 	else {
 		PRINT_ERROR("No board ID found in flash!");
+		saveLogSD("[ERROR] NO BOARD ID FOUND");
 		add_errors++;
 	}
 
-	// Set up SD card communication
-	PRINT_LOG("Initializing SD card...");				// Message to user
-	if (!SD.begin(CS_SD)) {
-		PRINT_WARN("SD card failed or not present"); 	// Initiate the SD card function with the pin that activates the card SD card error message
-		SDpresent = 0;
-		add_errors++;
-	}
-	else {
-		PRINT_LOG("SD card online.");
-		SDpresent = 1;
-		saveLogSD("LOGGING STARTED");
-	}
 	digitalWrite(CS_SD, HIGH); // SD card turned off for now
 
 	// Set time to compiler time if flag is set
@@ -256,9 +266,8 @@ void setup()
 				PRINT_LOG("ID in FLASH (MUST MATCH THE INPUT ID) = ");
 				serial.print(readFlashByte(0x000800), HEX);
 				serial.println(readFlashByte(0x000801), HEX);
-				if (readFlashByte(0x000801) != temp_id) {
+				if (readFlashByte(0x000801) != temp_id)
 					PRINT_ERROR("IDs DON'T MATCH!");
-				}
 				break;
 			case 'p':
 			case 'P':
@@ -305,7 +314,7 @@ void setup()
 /* this is the main function, loops forever */
 void loop()
 {
-	if (rtc.updateTime() == false) serial.print("RTC failed at beginning of loop "); // Updates the time variables from RTC
+	if (rtc.updateTime() == false) PRINT_ERROR("RTC failed at beginning of loop");
 
 	showTime();
 	unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();	// Combine hours and minutes into one variable
@@ -337,7 +346,7 @@ void loop()
 		// The following is executed if a tag is detected
 		RFIDstring = processTag(RFIDtagArray);   // Parse tag data into string and hexidecimal formats
 		// Updates the time variables from Real Time Clock
-		if (rtc.updateTime() == false) serial.print("RTC failed after tag read ");
+		if (rtc.updateTime() == false) PRINT_ERROR("RTC failed after tag read ");
 		timeSeconds = (rtc.getDate() * 86400) + (rtc.getHours() * 3600) + (rtc.getMinutes() * 60) + rtc.getSeconds();
 		tagNo = RFIDtagNumber;						// Stores the 4 least significant tag ID numbers - good for all tag comparisons I think.
 		serial.print(RFIDstring);					// Call a subroutine to display the tag data via serial USB
@@ -910,7 +919,7 @@ void run_tests(unsigned int add_errors)
 	if (num_of_errors + add_errors > 0) {
 		PRINT_WARN("[TEST] PRE-SETUP tests failed!");
 		PRINT_WARN("[TEST] Errors found: ");
-		serial.print("[TEST]   ");
+		serial.print("[WARN]    [TEST] ");
 		serial.println(num_of_errors + add_errors, DEC);
 	} else {
 		PRINT_LOG("[TEST] All tests passed!");

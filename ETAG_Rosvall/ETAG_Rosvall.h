@@ -37,7 +37,7 @@ CHANGE LOG:
 #define SLEEP_TIME (SLEEP_H * 100 + SLEEP_M)	// Combined hours and minutes for sleep time
 
 /* Constants (set time) */
-#define SET_TIME_ON_COMPILE 1					// Update time when uploaded: 1 - true, 0 - false
+#define SET_TIME_ON_COMPILE 0					// Update time when uploaded: 1 - true, 0 - false
 
 /* Constants (other) */
 #define serial SerialUSB	// Designate the USB connection as the primary serial comm port
