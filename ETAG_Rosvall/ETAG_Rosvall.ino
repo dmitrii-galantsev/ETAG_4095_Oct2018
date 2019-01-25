@@ -332,7 +332,7 @@ void loop()
 	serial.println("Scanning RFID circuit "); 	// Message part 1: Tell the user which circuit is active
 
 	// Attempt tag read
-	if (FastRead(DEMOD_OUT_PIN, CHECK_TIME, POLL_TIME1) == 1) {
+	if (FastRead(DEMOD_OUT_PIN, CHECK_TIME, POLL_TIME) == 1) {
 
 		// The following is executed if a tag is detected
 		RFIDstring = processTag(RFIDtagArray);   // Parse tag data into string and hexidecimal formats
@@ -457,8 +457,7 @@ void INT_demodOut(void)
 	volatile static uint32_t lastTime = 0;		// Clear this variable
 	uint16_t fDiff = timeNow - lastTime;		// Calculate time elapsed since the last execution of this function
 	lastTime = timeNow;							// Establish a new value for lastTime
-	// Int8_t fTimeClass = ManchesterDecoder::tUnknown;// ??????
-	int16_t fVal = digitalRead(DEMOD_OUT_PIN);	// Set fVal to the opposite (!) of the value on the RFID data pin (default is pin 30).
+	int16_t fVal = digitalRead(DEMOD_OUT_PIN);	// Set fVal to the opposite (!) of the value on the RFID data pin
 	byte RFbit = 255;							// Set to default, 255, (no bit read)
 
 	if (fDiff > 395 & fDiff < 600) {
@@ -601,7 +600,7 @@ void logRFID_To_SD(String timeString, String RFIDstring)
 		PRINT_LOG("saved to SD card.");				// Serial output message to user
 	}
 	else {
-		// Error message if the "datafile.txt" is not present or cannot be created
+		// Error message if the "EIDdatafile.txt" is not present or cannot be created
 		PRINT_ERROR("error opening DATA.txt");
 	}
 }
