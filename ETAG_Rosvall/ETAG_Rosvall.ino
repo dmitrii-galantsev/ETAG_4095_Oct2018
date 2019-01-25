@@ -332,7 +332,7 @@ void loop()
 	serial.println("Scanning RFID circuit "); 	// Message part 1: Tell the user which circuit is active
 
 	// Attempt tag read
-	if (FastRead(DEMOD_OUT_PIN, CHECK_TIME, POLL_TIME1) == 1) {
+	if (FastRead(DEMOD_OUT_PIN, CHECK_TIME, POLL_TIME) == 1) {
 
 		// The following is executed if a tag is detected
 		RFIDstring = processTag(RFIDtagArray);   // Parse tag data into string and hexidecimal formats

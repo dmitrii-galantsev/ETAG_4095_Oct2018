@@ -21,7 +21,7 @@ CHANGE LOG:
 #define CHECK_TIME 30
 // How long in milliseconds to try to read a tag if a tag was initially
 // detected (applies to both RF circuits, but that can be changed)
-#define POLL_TIME1 200
+#define POLL_TIME 200
 // Minimim time in seconds between recording the same tag twice in a row
 // (only applies to data logging--other operations are unaffected)
 #define DELAY_TIME 8
