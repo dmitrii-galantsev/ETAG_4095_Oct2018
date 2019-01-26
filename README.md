@@ -2,7 +2,7 @@
 
 Please refer to [Wiki](https://github.com/dmitrii-galantsev/ETAG_Rosvall/wiki) for additional information.
 
-Download files from here [https://github.com/dmitrii-galantsev/ETAG_Rosvall/wiki/Download-Firmware](https://github.com/dmitrii-galantsev/ETAG_Rosvall/wiki/Download-Firmware)`
+Download files from here [https://github.com/dmitrii-galantsev/ETAG_Rosvall/wiki/Download-Firmware](https://github.com/dmitrii-galantsev/ETAG_Rosvall/wiki/Download-Firmware)
 
 Stable branch: [v1.2](https://github.com/dmitrii-galantsev/ETAG_Rosvall/tree/v1.2)
 
