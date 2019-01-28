@@ -146,12 +146,12 @@ void setup()
 	}
 
 	// Start real time clock interfcace and get the current time
-	if (rtc.begin() == false) {
+	if (!rtc.begin()) {
 		PRINT_ERROR("RTC FAILED TO START"); // Try initiation and report if something is wrong
 		saveLogSD("[ERROR] RTC FAILED TO START");
 		add_errors++;
 	}
-	if (rtc.updateTime() == false) {
+	if (!rtc.updateTime()) {
 		// Updates the time variables from RTC, report if there's a failure
 		PRINT_ERROR("RTC FAILED TO UPDATE");
 		saveLogSD("[ERROR] RTC FAILED TO UPDATE");
@@ -314,7 +314,7 @@ void setup()
 /* this is the main function, loops forever */
 void loop()
 {
-	if (rtc.updateTime() == false) PRINT_ERROR("RTC failed at beginning of loop");
+	if (!rtc.updateTime()) PRINT_ERROR("RTC failed at beginning of loop");
 
 	showTime();
 	unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();	// Combine hours and minutes into one variable
@@ -332,7 +332,7 @@ void loop()
 		// ............//								// Sleep happens here
 		blipLED(30);									// Blink indicator - processor reawakened
 		rtc.stopTimer();
-		if(SDpresent == 1){
+		if(SDpresent){
 			pinMode(CS_SD, OUTPUT);						// Chip select pin for SD card must be an output for writing to SD card
 			SD.begin(CS_SD);
 			saveLogSD("SLEEP ENDED");
@@ -341,12 +341,12 @@ void loop()
 	serial.println("Scanning RFID circuit "); 	// Message part 1: Tell the user which circuit is active
 
 	// Attempt tag read
-	if (FastRead(DEMOD_OUT_PIN, CHECK_TIME, POLL_TIME) == 1) {
+	if (FastRead(DEMOD_OUT_PIN, CHECK_TIME, POLL_TIME)) {
 
 		// The following is executed if a tag is detected
 		RFIDstring = processTag(RFIDtagArray);   // Parse tag data into string and hexidecimal formats
 		// Updates the time variables from Real Time Clock
-		if (rtc.updateTime() == false) PRINT_ERROR("RTC failed after tag read ");
+		if (!rtc.updateTime()) PRINT_ERROR("RTC failed after tag read ");
 		timeSeconds = (rtc.getDate() * 86400) + (rtc.getHours() * 3600) + (rtc.getMinutes() * 60) + rtc.getSeconds();
 		tagNo = RFIDtagNumber;						// Stores the 4 least significant tag ID numbers - good for all tag comparisons I think.
 		serial.print(RFIDstring);					// Call a subroutine to display the tag data via serial USB
@@ -356,7 +356,7 @@ void loop()
 		if((timeSeconds < pastTimeSeconds + DELAY_TIME) & tagNo == tagNo2){ // If everything matches up, the read is a repeat - don't log it.
 			serial.println("Repeat read - data not logged.");
 		} else {
-			if(SDpresent == 1){
+			if(SDpresent){
 				serial.println("Logging tag data");
 				logRFID_To_SD(currentDateTime, RFIDstring);		// Call function to log data to the SD card
 			}
@@ -369,7 +369,20 @@ void loop()
 
 	digitalWrite(SHD_PINA, HIGH);		// Shut down RFID
 
-	delay(PAUSE_TIME);					// Pause between polling attempts
+	if (serial) {
+		delay(PAUSE_TIME);					// Pause between polling attempts
+	} else {
+		byte pauseInterval = (PAUSE_TIME * 64)/1000;
+		rtc.setRptTimer(pauseInterval, 1);	// Set timer and use frequency of 64 Hz
+		pinMode(CS_SD, INPUT);				// Make the SD card pin an input so it can serve as interrupt pin
+		rtc.startTimer();					// Start the timer
+		lpSleep();							// Call sleep funciton
+		rtc.stopTimer();
+		if(SDpresent) {
+			pinMode(CS_SD, OUTPUT);			// Chip select pin for SD card must be an output for writing to SD card
+			SD.begin(CS_SD);
+		}
+	}
 }
 
 
@@ -854,7 +867,7 @@ void saveLogSD(String event)
 	if (dataFile) {
 		dataFile.print(event);
 		dataFile.print(": ");						// Space for data delineation
-		if (rtc.updateTime() == false) {
+		if (!rtc.updateTime()) {
 			serial.print("RTC failed");				// Updates the time variables from RTC
 		}
 		String currentDate = rtc.stringDateUSA();	// Get the current date in mm/dd/yyyy format (we're weird in the US)
