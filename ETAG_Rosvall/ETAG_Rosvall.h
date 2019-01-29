@@ -83,7 +83,7 @@ CHANGE LOG:
                                                   ====UU====UU====	 	 	 \n\
                                                       '//||\\\\`	 	 	 \n\
                                                          ''``	 	 	 	 \n"
-#define VERSION "1.2"
+#define VERSION "Experimental"
 #define PADDING "\n\n\n"
 
 /* Function headers */

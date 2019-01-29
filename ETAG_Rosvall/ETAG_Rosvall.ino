@@ -306,6 +306,9 @@ void setup()
 		dataFile.println(String(String(BOARD_ID, HEX) + "DATA"));	// write board id to the file
 		dataFile.close();
 	}
+	// Write message to sd card
+	saveLogSD("LOGGING STARTED");
+	// Turn off the sd card
 	digitalWrite(CS_SD, HIGH);
 }
 
@@ -317,10 +320,10 @@ void loop()
 	if (!rtc.updateTime()) PRINT_ERROR("RTC failed at beginning of loop");
 
 	showTime();
-	unsigned int curTime = rtc.getHours() * 100 + rtc.getMinutes();	// Combine hours and minutes into one variable
 	byte RFIDtagArray[5];											// Stores the five individual bytes of a tag ID.
 	String RFIDstring = "";
-	while (curTime == SLEEP_TIME) {						// Designated go to sleep time
+	// combined hours and minutes into 1 value
+	if (rtc.getHours() * 100 + rtc.getMinutes() == SLEEP_TIME) {
 		digitalWrite(SHD_PINA, HIGH);					// Shut down RFID reader
 		// Serial.println("seting alarm");
 		rtc.setAlarm(0, WAKE_M, WAKE_H, 1, 1);			// Second, minute, hour, date, month
@@ -337,6 +340,7 @@ void loop()
 			SD.begin(CS_SD);
 			saveLogSD("SLEEP ENDED");
 		}
+		//rtc.updateTime();
 	}
 	serial.println("Scanning RFID circuit "); 	// Message part 1: Tell the user which circuit is active
 
@@ -878,7 +882,7 @@ void saveLogSD(String event)
 		dataFile.print(" BOARD_ID = ");
 		dataFile.println(BOARD_ID, HEX);
 		dataFile.close();							// Close the file
-		serial.println("saved log to SD card.");	// Serial output message to user
+		PRINT_LOG("saved log to SD card.");	// Serial output message to user
 	} // Check dataFile is present
 	else {
 		PRINT_ERROR("error opening log.txt");	// Error message if the "datafile.txt" is not present or cannot be created
