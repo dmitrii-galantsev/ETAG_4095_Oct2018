@@ -1,7 +1,7 @@
 
 /*
    Data logging sketch for the ETAG RFID Reader
-   Version 1.2
+   Version EXPERIMENTAL
    Code by:
    Alexander Moreno
    David Mitchell
@@ -163,8 +163,26 @@ void setup()
 		saveLogSD("[ERROR] RTC YEAR = 0");
 		add_errors++;
 	}
-	PRINT_LOG("Clock is set to: "); 		// Serial message for clock output
+
+	// Print settings
+	PRINT_LOG("Clock is set to: "); 					// Serial message for clock output
 	showTime();											// Function that displays the clock time
+	serial.print("[LOG]   CHECK_TIME = ");
+	serial.println(CHECK_TIME, DEC);
+	serial.print("[LOG]   POLL_TIME  = ");
+	serial.println(POLL_TIME , DEC);
+	serial.print("[LOG]   DELAY_TIME = ");
+	serial.println(DELAY_TIME, DEC);
+	serial.print("[LOG]   PAUSE_TIME = ");
+	serial.println(PAUSE_TIME, DEC);
+	serial.print("[LOG]   SLEEP_H    = ");
+	serial.println(SLEEP_H   , DEC);
+	serial.print("[LOG]   SLEEP_M    = ");
+	serial.println(SLEEP_M   , DEC);
+	serial.print("[LOG]   WAKE_H     = ");
+	serial.println(WAKE_H    , DEC);
+	serial.print("[LOG]   WAKE_M     = ");
+	serial.println(WAKE_M    , DEC);
 
 	// Set up communication with the flash memory
 	SPI.begin();														// Enable SPI communication for Flash Memory
@@ -186,9 +204,11 @@ void setup()
 	delay(1000);
 
 	// Set up board ID
-	if (readFlashByte(0x000800) == 0x0E)
+	if (readFlashByte(0x000800) == 0x0E) {
 		BOARD_ID = 0xE00 | readFlashByte(0x000801);
-	else {
+		serial.print("[LOG]   BOARD_ID = ");
+		serial.println(BOARD_ID, HEX);
+	} else {
 		PRINT_ERROR("No board ID found in flash!");
 		saveLogSD("[ERROR] NO BOARD ID FOUND");
 		add_errors++;
@@ -223,7 +243,7 @@ void setup()
 		serial.println("	E/e = erase (reset) backup memory");
 		serial.println("	Anything else = start logging");
 		unsigned int serDelay = 0;							// If there's no response then eventually move on and just start logging
-		while (!serial.available() && serDelay++ < 15000) 	// Wait about 15 seconds for a user response
+		while (!serial.available() && serDelay++ < 60000) 	// Wait about 60 seconds for a user response
 			delay(1);
 		if (!serial.available()) {							// If there is a response then perform the corresponding operation
 			menu = 0;
@@ -329,7 +349,7 @@ void loop()
 		rtc.setAlarm(0, WAKE_M, WAKE_H, 1, 1);			// Second, minute, hour, date, month
 		rtc.enableInterrupt(INTERRUPT_AIE);
 		rtc.setAlarmMode(4);
-		saveLogSD("SLEEP STARTED");						// Note for the log
+		saveLogSD("SLEEP   STARTED");					// Note for the log
 		pinMode(CS_SD, INPUT);							// Make the SD card pin an input so it can serve as interrupt pin
 		lpSleep();										// Call sleep funciton
 		// ............//								// Sleep happens here
@@ -338,7 +358,7 @@ void loop()
 		if(SDpresent){
 			pinMode(CS_SD, OUTPUT);						// Chip select pin for SD card must be an output for writing to SD card
 			SD.begin(CS_SD);
-			saveLogSD("SLEEP ENDED");
+			saveLogSD("SLEEP   ENDED  ");
 		}
 		//rtc.updateTime();
 	}

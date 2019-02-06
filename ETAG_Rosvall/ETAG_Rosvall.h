@@ -1,7 +1,7 @@
 
 /*
    Data logging sketch for the ETAG RFID Reader
-   Version 1.2
+   Version EXPERIMENTAL
    Code by:
    Dmitrii Galantsev
 
@@ -24,16 +24,16 @@ CHANGE LOG:
 #define POLL_TIME 200
 // Minimim time in seconds between recording the same tag twice in a row
 // (only applies to data logging--other operations are unaffected)
-#define DELAY_TIME 8
+#define DELAY_TIME 1
 // CRITICAL - This determines how long in milliseconds to wait between reading attempts.
 // Make this wait time as long as you can and still maintain functionality (more PAUSE_TIME = more power saved)
 #define PAUSE_TIME 500
 
 /* Constants (sleep) */
-#define SLEEP_H 21								// When to sleep   - hour
-#define SLEEP_M 0								// When to sleep   - minute
-#define WAKE_H 	7								// When to wake up - hour
-#define WAKE_M 	0								// When to wake up - minute
+#define SLEEP_H 15								// When to sleep   - hour
+#define SLEEP_M 00								// When to sleep   - minute
+#define WAKE_H 	15								// When to wake up - hour
+#define WAKE_M 	20								// When to wake up - minute
 #define SLEEP_TIME (SLEEP_H * 100 + SLEEP_M)	// Combined hours and minutes for sleep time
 
 /* Constants (set time) */
