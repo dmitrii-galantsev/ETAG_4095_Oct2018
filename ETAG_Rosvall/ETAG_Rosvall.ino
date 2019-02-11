@@ -225,6 +225,7 @@ void setup()
 /*******************************TESTS**************************************/
 	run_tests(add_errors);
 
+
 /*******************************MENU***************************************/
 	// Display options menu to user
 	byte menu = 1;
@@ -243,12 +244,14 @@ void setup()
 		serial.println("	E/e = erase (reset) backup memory");
 		serial.println("	Anything else = start logging");
 		unsigned int serDelay = 0;							// If there's no response then eventually move on and just start logging
-		while (!serial.available() && serDelay++ < 60000) 	// Wait about 60 seconds for a user response
-			delay(1);
-		if (!serial.available()) {							// If there is a response then perform the corresponding operation
+
+		if (!serial) {
 			menu = 0;
 			continue;
 		}
+
+		while (!serial.available() && serDelay++ < 60000) 	// Wait about 60 seconds for a user response
+			delay(1);
 
 		switch (serial.read()) {
 			case 'c':
@@ -338,6 +341,11 @@ void setup()
 void loop()
 {
 	if (!rtc.updateTime()) PRINT_ERROR("RTC failed at beginning of loop");
+
+	//while (true) {
+		//serial.print("owo ");
+		//serial.println(serial.available());
+	//}
 
 	showTime();
 	byte RFIDtagArray[5];											// Stores the five individual bytes of a tag ID.
