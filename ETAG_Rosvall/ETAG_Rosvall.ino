@@ -342,11 +342,6 @@ void loop()
 {
 	if (!rtc.updateTime()) PRINT_ERROR("RTC failed at beginning of loop");
 
-	//while (true) {
-		//serial.print("owo ");
-		//serial.println(serial.available());
-	//}
-
 	showTime();
 	byte RFIDtagArray[5];											// Stores the five individual bytes of a tag ID.
 	String RFIDstring = "";

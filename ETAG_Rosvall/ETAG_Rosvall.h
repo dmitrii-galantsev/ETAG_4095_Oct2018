@@ -24,7 +24,7 @@ CHANGE LOG:
 #define POLL_TIME 200
 // Minimim time in seconds between recording the same tag twice in a row
 // (only applies to data logging--other operations are unaffected)
-#define DELAY_TIME 1
+#define DELAY_TIME 1.5
 // CRITICAL - This determines how long in milliseconds to wait between reading attempts.
 // Make this wait time as long as you can and still maintain functionality (more PAUSE_TIME = more power saved)
 #define PAUSE_TIME 500
