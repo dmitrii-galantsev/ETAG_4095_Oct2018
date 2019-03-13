@@ -30,10 +30,10 @@ CHANGE LOG:
 #define PAUSE_TIME 500
 
 /* Constants (sleep) */
-#define SLEEP_H 15								// When to sleep   - hour
+#define SLEEP_H 21								// When to sleep   - hour
 #define SLEEP_M 00								// When to sleep   - minute
-#define WAKE_H 	15								// When to wake up - hour
-#define WAKE_M 	20								// When to wake up - minute
+#define WAKE_H 	06								// When to wake up - hour
+#define WAKE_M 	00								// When to wake up - minute
 #define SLEEP_TIME (SLEEP_H * 100 + SLEEP_M)	// Combined hours and minutes for sleep time
 
 /* Constants (set time) */
