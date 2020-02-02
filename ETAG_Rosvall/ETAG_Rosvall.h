@@ -43,7 +43,7 @@ CHANGE LOG:
 #define serial SerialUSB	// Designate the USB connection as the primary serial comm port
 #define DEMOD_OUT_PIN	30  // (PB03) this is the target pin for the raw RFID data
 #define SHD_PINA		8   // (PA06) Setting this pin high activates the primary RFID circuit (only one can be active at a time)
-#define CS_SD			7   // Chip select for SD card - make this pin low to activate the SD card, also the clock interupt pin
+#define CS_SD			44  // Chip select for SD card - make this pin low to activate the SD card, also the clock interupt pin
 #define CS_FLASH		2	// Chip select for flash memory
 #define LED_RFID		31  // Pin to control the LED indicator.
 #define INT1			7	// Interrupt pin
